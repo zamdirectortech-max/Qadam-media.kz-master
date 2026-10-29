@@ -1,0 +1,149 @@
+"use client";
+
+import { PhotoEditorModal } from "@/components/photo-editor-modal";
+import { PlatformPreview } from "@/components/platform-preview";
+import { PageHeading } from "@/components/page-heading";
+import { useLocale } from "@/components/locale-provider";
+import { CalendarDays, Check, ChevronDown, Clipboard, Copy, ImagePlus, ImageUp, LoaderCircle, Palette, Pencil, Play, Rocket, Save, Send, Sparkles, Trash2, Wand2 } from "lucide-react";
+import Link from "next/link";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { readBrandKit, type BrandKit } from "@/lib/brand-kit";
+
+const platformList = ["Instagram", "Facebook", "TikTok", "Telegram", "YouTube", "LinkedIn", "WhatsApp", "Threads", "VK / ВКонтакте", "X / Twitter", "Google Business"] as const;
+type Platform = (typeof platformList)[number];
+type Hashtags = { primary: string[]; thematic: string[]; local: string[] };
+type PlatformContent = { title: string; text: string; cta: string; hashtags: string[]; extra: string };
+type GeneratedContent = {
+  headline: string; body: string; cta: string; shortVersion: string; storyIdea: string; videoIdea: string;
+  hashtags: Hashtags; platforms: Partial<Record<Platform, PlatformContent>>;
+};
+type WeekDay = { day: number; title: string; format: string; idea: string };
+type MediaItem = { id: string; type: "image" | "video"; url: string; name: string };
+
+const ui = {
+  ru: {
+    eyebrow:"AI CONTENT STUDIO", title:"Одна идея — контент для всех платформ", subtitle:"Опишите идею простыми словами. AI подготовит текст, форматы для соцсетей и предпросмотр публикации.",
+    settings:"Настройки AI", language:"Язык", audience:"Целевая аудитория", style:"Стиль", idea:"Что вы хотите опубликовать?", placeholder:"Напишите простыми словами, что произошло или что вы хотите рассказать. Например: Мы открыли новый филиал в Шымкенте. Первые 3 дня скидка 20%.",
+    media:"Фото и видео", upload:"Добавить фото или видео", mediaHint:"JPG, PNG, WebP или видео до 50 МБ. Можно выбрать несколько файлов.", create:"Создать контент", creating:"AI создаёт контент...", all:"Создать для всех платформ", week:"Создать контент на 7 дней", platforms:"Выберите платформы", recommendations:"AI-рекомендации", recText:"Выберите одну или несколько платформ. AI создаст отдельную версию с учётом формата и аудитории каждой сети.",
+    result:"Готовый контент", headline:"Заголовок", mainText:"Основной текст", cta:"Призыв к действию", short:"Короткая версия", story:"Идея для Stories", videoIdea:"Идея для Reels / TikTok", aiEdit:"AI-редактирование", hashtags:"Умные хэштеги", primary:"Основные", thematic:"Тематические", local:"Локальные", regenerateTags:"Сгенерировать хэштеги", preview:"Предпросмотр", visual:"Создать дизайн", adapt:"Адаптировать под платформу", edit:"Редактировать", remove:"Удалить", copy:"Копировать", copied:"Скопировано", draft:"Сохранить как черновик", schedule:"Запланировать", publish:"Опубликовать", regenerate:"Создать заново", brand:"Brand Kit", addBrand:"Добавить бренд", brandHint:"Подключите логотип, фирменные цвета и контакты — AI сможет учитывать их в следующих версиях.", weekTitle:"Контент-план на 7 дней", close:"Закрыть", notConnected:"Публикация и планирование пока не подключены. Подключите социальный аккаунт.", connect:"Подключить аккаунт", draftLocal:"Черновик сохранён только в этом браузере.", noMedia:"Добавьте фото или видео, чтобы увидеть визуальный preview.", designOn:"Фирменный дизайн включён в предпросмотр.", mediaLimit:"Файл слишком большой. Максимальный размер — 50 МБ.", mediaType:"Поддерживаются изображения и видео.", improve:"✨ Улучшить текст", sales:"🔥 Сделать продающим", news:"📰 Сделать новостным", professional:"💼 Сделать профессиональным", friendly:"😊 Сделать дружелюбным", shorter:"⚡ Сделать короче", details:"📖 Сделать подробнее", addCta:"🎯 Добавить CTA", kk:"🇰🇿 На казахский", ru:"🇷🇺 На русский", en:"🇬🇧 На английский", again:"🔄 Перегенерировать", editing:"AI редактирует...", more:"Дополнительные возможности", sourceRequired:"Сначала напишите идею.", generationError:"Не удалось создать контент. Попробуйте ещё раз.", photo:"Фото", video:"Видео"
+  },
+  kk: {
+    eyebrow:"AI CONTENT STUDIO", title:"Бір идея — барлық платформаға арналған контент", subtitle:"Идеяңызды қарапайым сөзбен жазыңыз. AI мәтін, әлеуметтік желі форматтары және жарияланымның алдын ала көрінісін дайындайды.",
+    settings:"AI баптаулары", language:"Тіл", audience:"Мақсатты аудитория", style:"Стиль", idea:"Не жариялағыңыз келеді?", placeholder:"Не болғанын немесе не туралы айтқыңыз келетінін қарапайым сөзбен жазыңыз. Мысалы: Шымкентте жаңа филиал аштық. Алғашқы 3 күнде 20% жеңілдік.",
+    media:"Фото және видео", upload:"Фото немесе видео қосу", mediaHint:"JPG, PNG, WebP немесе 50 МБ-қа дейінгі видео. Бірнеше файл таңдауға болады.", create:"Контент жасау", creating:"AI контент жасап жатыр...", all:"Барлық платформаға жасау", week:"7 күнге контент жасау", platforms:"Платформаларды таңдаңыз", recommendations:"AI ұсыныстары", recText:"Бір немесе бірнеше платформаны таңдаңыз. AI әр желінің форматы мен аудиториясына сай жеке нұсқа жасайды.",
+    result:"Дайын контент", headline:"Тақырып", mainText:"Негізгі мәтін", cta:"Әрекетке шақыру", short:"Қысқа нұсқа", story:"Stories идеясы", videoIdea:"Reels / TikTok идеясы", aiEdit:"AI арқылы өңдеу", hashtags:"Ақылды хэштегтер", primary:"Негізгі", thematic:"Тақырыптық", local:"Жергілікті", regenerateTags:"Хэштегтер жасау", preview:"Алдын ала көру", visual:"Дизайн жасау", adapt:"Платформаға бейімдеу", edit:"Өңдеу", remove:"Жою", copy:"Көшіру", copied:"Көшірілді", draft:"Нобай ретінде сақтау", schedule:"Жоспарлау", publish:"Жариялау", regenerate:"Қайта жасау", brand:"Brand Kit", addBrand:"Бренд қосу", brandHint:"Логотипті, фирмалық түстер мен байланыстарды қосыңыз — AI оларды келесі нұсқаларда ескереді.", weekTitle:"7 күндік контент-жоспар", close:"Жабу", notConnected:"Жариялау және жоспарлау әлі қосылмаған. Әлеуметтік аккаунтты қосыңыз.", connect:"Аккаунт қосу", draftLocal:"Нобай тек осы браузерде сақталды.", noMedia:"Визуалды preview көру үшін фото немесе видео қосыңыз.", designOn:"Фирмалық дизайн алдын ала көрініске қосылды.", mediaLimit:"Файл тым үлкен. Ең үлкен көлемі — 50 МБ.", mediaType:"Суреттер мен видеолар қолданылады.", improve:"✨ Мәтінді жақсарту", sales:"🔥 Сатылымдық ету", news:"📰 Жаңалық стилі", professional:"💼 Кәсіби ету", friendly:"😊 Достық стиль", shorter:"⚡ Қысқарту", details:"📖 Толығырақ ету", addCta:"🎯 CTA қосу", kk:"🇰🇿 Қазақшаға", ru:"🇷🇺 Орысшаға", en:"🇬🇧 Ағылшыншаға", again:"🔄 Қайта жасау", editing:"AI өңдеп жатыр...", more:"Қосымша мүмкіндіктер", sourceRequired:"Алдымен идеяны жазыңыз.", generationError:"Контент жасау мүмкін болмады. Қайта көріңіз.", photo:"Фото", video:"Видео"
+  },
+  en: {
+    eyebrow:"AI CONTENT STUDIO", title:"One idea — content for every platform", subtitle:"Describe your idea in plain language. AI will prepare copy, social formats and a visual preview.",
+    settings:"AI settings", language:"Language", audience:"Target audience", style:"Style", idea:"What do you want to publish?", placeholder:"Describe what happened or what you want to share in simple words. Example: We opened a new branch in Shymkent. The first three days have a 20% discount.",
+    media:"Photos and video", upload:"Add photos or video", mediaHint:"JPG, PNG, WebP or video up to 50 MB. Multiple files are supported.", create:"Create content", creating:"AI is creating content...", all:"Create for all platforms", week:"Create 7-day content", platforms:"Choose platforms", recommendations:"AI recommendations", recText:"Choose one or more platforms. AI will make a distinct version for each network's format and audience.",
+    result:"Ready content", headline:"Headline", mainText:"Main text", cta:"Call to action", short:"Short version", story:"Stories idea", videoIdea:"Reels / TikTok idea", aiEdit:"AI editing", hashtags:"Smart hashtags", primary:"Primary", thematic:"Thematic", local:"Local", regenerateTags:"Generate hashtags", preview:"Preview", visual:"Create design", adapt:"Adapt to platform", edit:"Edit", remove:"Remove", copy:"Copy", copied:"Copied", draft:"Save as draft", schedule:"Schedule", publish:"Publish", regenerate:"Create again", brand:"Brand Kit", addBrand:"Add brand", brandHint:"Connect a logo, brand colors and contacts so AI can use them in future versions.", weekTitle:"7-day content plan", close:"Close", notConnected:"Publishing and scheduling are not connected yet. Connect a social account.", connect:"Connect account", draftLocal:"Draft saved in this browser only.", noMedia:"Add a photo or video to see the visual preview.", designOn:"Brand design is enabled in the preview.", mediaLimit:"The file is too large. Maximum size is 50 MB.", mediaType:"Images and videos are supported.", improve:"✨ Improve text", sales:"🔥 Make it sales-focused", news:"📰 Make it newsworthy", professional:"💼 Make it professional", friendly:"😊 Make it friendly", shorter:"⚡ Make it shorter", details:"📖 Add detail", addCta:"🎯 Add CTA", kk:"🇰🇿 Translate to Kazakh", ru:"🇷🇺 Translate to Russian", en:"🇬🇧 Translate to English", again:"🔄 Regenerate", editing:"AI is editing...", more:"Additional features", sourceRequired:"Write your idea first.", generationError:"Could not generate content. Please try again.", photo:"Photo", video:"Video"
+  }
+} as const;
+
+const audienceOptions = ["Small business", "Medium business", "Enterprise", "University / Education", "Government organization", "Event", "Personal brand", "Other"];
+const styleOptions = ["Professional", "News", "Advertising", "Friendly", "Youth", "Business", "Official", "Creative"];
+const optionLabels: Record<string, Record<"ru"|"kk"|"en", string>> = {
+  "Small business":{ru:"Малый бизнес",kk:"Шағын бизнес",en:"Small business"}, "Medium business":{ru:"Средний бизнес",kk:"Орта бизнес",en:"Medium business"}, "Enterprise":{ru:"Крупный бизнес",kk:"Ірі бизнес",en:"Enterprise"}, "University / Education":{ru:"Университет / Образование",kk:"Университет / Білім",en:"University / Education"}, "Government organization":{ru:"Государственная организация",kk:"Мемлекеттік ұйым",en:"Government organization"}, "Event":{ru:"Мероприятие",kk:"Іс-шара",en:"Event"}, "Personal brand":{ru:"Личный бренд",kk:"Жеке бренд",en:"Personal brand"}, "Other":{ru:"Другое",kk:"Басқа",en:"Other"},
+  "Professional":{ru:"Профессиональный",kk:"Кәсіби",en:"Professional"}, "News":{ru:"Новостной",kk:"Жаңалық",en:"News"}, "Advertising":{ru:"Рекламный",kk:"Жарнамалық",en:"Advertising"}, "Friendly":{ru:"Дружелюбный",kk:"Достық",en:"Friendly"}, "Youth":{ru:"Молодёжный",kk:"Жастарға арналған",en:"Youth"}, "Business":{ru:"Деловой",kk:"Іскерлік",en:"Business"}, "Official":{ru:"Официальный",kk:"Ресми",en:"Official"}, "Creative":{ru:"Креативный",kk:"Креативті",en:"Creative"}
+};
+
+const brandUi={
+ ru:{active:"Brand Kit применяется",off:"Brand Kit выключен",use:"Использовать Brand Kit",notSet:"Brand Kit ещё не заполнен",edit:"Настроить бренд",applies:"AI использует название, описание, аудиторию, tone of voice и правила бренда.",apply:"Применить бренд и обновить контент",applied:"Контент обновлён с учётом Brand Kit"},
+ kk:{active:"Brand Kit қолданылуда",off:"Brand Kit өшірулі",use:"Brand Kit пайдалану",notSet:"Brand Kit әлі толтырылмаған",edit:"Брендті баптау",applies:"AI бренд атауын, сипаттамасын, аудиториясын, tone of voice және ережелерін қолданады.",apply:"Брендті қолданып контентті жаңарту",applied:"Контент Brand Kit бойынша жаңартылды"},
+ en:{active:"Brand Kit is active",off:"Brand Kit is disabled",use:"Use Brand Kit",notSet:"Brand Kit is not configured",edit:"Configure brand",applies:"AI uses the brand name, description, audience, tone of voice and rules.",apply:"Apply brand and regenerate",applied:"Content updated with Brand Kit"}
+} as const;
+
+export default function CreateContentPage() {
+  const { locale, t } = useLocale();
+  const c = ui[locale];
+  const [sourceText,setSourceText]=useState(""); const [language,setLanguage]=useState("Russian"); const [audience,setAudience]=useState("Small business"); const [tone,setTone]=useState("Professional");
+  const [selected,setSelected]=useState<Platform[]>(["Instagram","Telegram"]); const [activePlatform,setActivePlatform]=useState<Platform>("Instagram");
+  const [media,setMedia]=useState<MediaItem[]>([]); const [editor,setEditor]=useState<{id:string;url:string}|null>(null); const fileRef=useRef<HTMLInputElement>(null);
+  const [content,setContent]=useState<GeneratedContent|null>(null); const [weekPlan,setWeekPlan]=useState<WeekDay[]>([]); const [loading,setLoading]=useState(""); const [error,setError]=useState(""); const [notice,setNotice]=useState("");
+  const [hashtagCount,setHashtagCount]=useState(10); const [designEnabled,setDesignEnabled]=useState(false); const [copied,setCopied]=useState(false);
+  const [brandKit,setBrandKit]=useState<BrandKit|null>(null);const [brandEnabled,setBrandEnabled]=useState(true);const bc=brandUi[locale];
+
+  useEffect(()=>setLanguage({ru:"Russian",kk:"Kazakh",en:"English"}[locale]),[locale]);
+  useEffect(()=>{const refresh=()=>setBrandKit(readBrandKit());refresh();window.addEventListener("focus",refresh);return()=>window.removeEventListener("focus",refresh)},[]);
+  const activeContent=content?.platforms?.[activePlatform] ?? (content ? {title:content.headline,text:content.body,cta:content.cta,hashtags:[...content.hashtags.primary,...content.hashtags.thematic,...content.hashtags.local],extra:content.storyIdea}:null);
+  const heroMedia=useMemo(()=>media[0] ?? null,[media]);
+
+  function togglePlatform(platform:Platform){setSelected(items=>items.includes(platform)?(items.length===1?items:items.filter(x=>x!==platform)):[...items,platform]);setActivePlatform(platform);}
+  async function api(payload:Record<string,unknown>){const {logo,...brandContext}=brandKit??readBrandKit();const response=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sourceText,language,audience,tone,brandKit:brandEnabled?brandContext:undefined,...payload})});const data=await response.json();if(!response.ok)throw new Error(data.error??c.generationError);return data;}
+  async function generate(all=false,successNotice=""){if(!sourceText.trim()){setError(c.sourceRequired);return;}setLoading("generate");setError("");setNotice("");try{const platforms=all?[...platformList]:selected;const data=await api({mode:"generate",platforms});setContent(data.content);setSelected(platforms);setActivePlatform(platforms[0]);if(successNotice)setNotice(successNotice);}catch(e){setError(e instanceof Error?e.message:c.generationError);}finally{setLoading("");}}
+  async function editResult(instruction:string){if(!content)return;setLoading("edit");setError("");try{const data=await api({mode:"edit",currentText:content.body,instruction});setContent({...content,body:data.text});}catch(e){setError(e instanceof Error?e.message:c.generationError);}finally{setLoading("");}}
+  async function regenerateHashtags(){if(!sourceText.trim())return;setLoading("hashtags");try{const data=await api({mode:"hashtags",hashtagCount});setContent(current=>current?{...current,hashtags:data.hashtags}:current);}catch(e){setError(e instanceof Error?e.message:c.generationError);}finally{setLoading("");}}
+  async function createWeek(){if(!sourceText.trim()){setError(c.sourceRequired);return;}setLoading("week");try{const data=await api({mode:"week"});setWeekPlan(data.weekPlan);}catch(e){setError(e instanceof Error?e.message:c.generationError);}finally{setLoading("");}}
+  function addMedia(event:ChangeEvent<HTMLInputElement>){const files=Array.from(event.target.files??[]);event.target.value="";files.forEach(file=>{if(file.size>50*1024*1024){setError(c.mediaLimit);return;}const type=file.type.startsWith("image/")?"image":file.type.startsWith("video/")?"video":null;if(!type){setError(c.mediaType);return;}if(type==="video"){setMedia(items=>[...items,{id:crypto.randomUUID(),type,url:URL.createObjectURL(file),name:file.name}]);return;}const reader=new FileReader();reader.onload=()=>setMedia(items=>[...items,{id:crypto.randomUUID(),type,url:String(reader.result),name:file.name}]);reader.readAsDataURL(file);});}
+  function updateBody(value:string){setContent(current=>current?{...current,body:value}:current);}
+  async function copyText(){if(!content)return;await navigator.clipboard.writeText([content.headline,content.body,content.cta,...content.hashtags.primary,...content.hashtags.thematic,...content.hashtags.local].join("\n\n"));setCopied(true);setTimeout(()=>setCopied(false),1500);}
+  function saveDraft(){if(!content)return;localStorage.setItem("qadam-content-draft",JSON.stringify({sourceText,content,selected,updatedAt:new Date().toISOString()}));setNotice(c.draftLocal);}
+
+  const quickActions:[[string,string],...[string,string][]]=[[c.improve,"Improve clarity and impact"],[c.sales,"Make it sales-focused"],[c.news,"Make it newsworthy"],[c.professional,"Make it professional"],[c.friendly,"Make it friendly"],[c.shorter,"Make it shorter"],[c.details,"Add useful detail"],[c.addCta,"Add a stronger CTA"],[c.kk,"Translate to Kazakh"],[c.ru,"Translate to Russian"],[c.en,"Translate to English"],[c.again,"Regenerate with a fresh angle"]];
+  const hasBrand=!!(brandKit?.brandName||brandKit?.description||brandKit?.aiInstructions);
+
+  return <>
+    <PageHeading eyebrow={c.eyebrow} title={c.title} text={c.subtitle}/>
+    <section className="panel overflow-hidden">
+      <div className="border-b border-line bg-white p-5 md:p-7">
+        <div className="mb-5 flex items-center justify-between gap-3"><div><p className="muted-label">01 / IDEA</p><h2 className="mt-1 text-xl font-semibold">{c.idea}</h2></div><Sparkles className="text-brand"/></div>
+        <textarea value={sourceText} onChange={e=>setSourceText(e.target.value)} maxLength={5000} placeholder={c.placeholder} className="min-h-44 w-full rounded-xl border border-line bg-cloud p-5 text-base leading-7 outline-none"/>
+        <div className="mt-2 flex justify-end text-xs text-slate-500">{sourceText.length}/5000</div>
+        <details className="studio-details mt-5" open><summary><span>{c.settings}</span><ChevronDown size={17}/></summary><div className="grid gap-3 pt-4 md:grid-cols-3">
+          <label className="studio-field"><span>{c.language}</span><select value={language} onChange={e=>setLanguage(e.target.value)}><option value="Russian">Русский</option><option value="Kazakh">Қазақша</option><option value="English">English</option></select></label>
+          <label className="studio-field"><span>{c.audience}</span><select value={audience} onChange={e=>setAudience(e.target.value)}>{audienceOptions.map(x=><option key={x} value={x}>{optionLabels[x][locale]}</option>)}</select></label>
+          <label className="studio-field"><span>{c.style}</span><select value={tone} onChange={e=>setTone(e.target.value)}>{styleOptions.map(x=><option key={x} value={x}>{optionLabels[x][locale]}</option>)}</select></label>
+        </div></details>
+        <div className={`mt-4 rounded-xl border p-4 ${hasBrand&&brandEnabled?"border-emerald-200 bg-emerald-50/70":"border-line bg-cloud"}`}>
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div className="flex items-center gap-3">{brandKit?.logo?<img src={brandKit.logo} alt="" className="h-11 w-11 rounded-lg bg-white object-contain p-1"/>:<div className="flex h-11 w-11 items-center justify-center rounded-lg bg-white text-brand"><Palette size={21}/></div>}<div><div className="flex flex-wrap items-center gap-2"><b>{hasBrand?(brandKit?.brandName||c.brand):bc.notSet}</b>{hasBrand&&<span className={`rounded-full px-2 py-1 text-[10px] font-bold ${brandEnabled?"bg-emerald-100 text-emerald-700":"bg-slate-200 text-slate-600"}`}>{brandEnabled?bc.active:bc.off}</span>}</div><p className="mt-1 text-xs text-slate-500">{hasBrand?bc.applies:c.brandHint}</p></div></div><div className="flex items-center gap-3">{hasBrand&&<label className="flex cursor-pointer items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={brandEnabled} onChange={e=>setBrandEnabled(e.target.checked)}/>{bc.use}</label>}<Link href="/dashboard/brand" className="secondary-button px-3 py-2">{bc.edit}</Link></div></div>
+          {hasBrand&&<div className="mt-3 flex flex-wrap items-center gap-2 border-t border-emerald-100 pt-3"><span className="text-xs text-slate-500">{brandKit?.tone}</span>{brandKit?.colors?.map(color=><span key={color} className="h-5 w-5 rounded-full border border-white shadow" style={{background:color}} title={color}/>)}</div>}
+        </div>
+      </div>
+
+      <div className="grid gap-0 lg:grid-cols-[1.15fr_.85fr]">
+        <div className="border-b border-line p-5 md:p-7 lg:border-b-0 lg:border-r"><div className="flex items-center justify-between"><div><p className="muted-label">02 / MEDIA</p><h2 className="mt-1 text-lg font-semibold">{c.media}</h2></div><ImagePlus className="text-brand"/></div>
+          <input ref={fileRef} type="file" className="hidden" accept="image/*,video/*" multiple onChange={addMedia}/>
+          <button onClick={()=>fileRef.current?.click()} className="media-drop mt-4"><ImageUp size={24}/><b>{c.upload}</b><span>{c.mediaHint}</span></button>
+          {media.length>0&&<div className="media-grid mt-4">{media.map(item=><article key={item.id}>{item.type==="image"?<img src={item.url} alt={item.name}/>:<video src={item.url} controls/>}<span>{item.type==="image"?c.photo:c.video}</span><div>{item.type==="image"&&<button onClick={()=>setEditor({id:item.id,url:item.url})} aria-label={c.edit}><Pencil size={15}/></button>}<button onClick={()=>setMedia(items=>items.filter(x=>x.id!==item.id))} aria-label={c.remove}><Trash2 size={15}/></button></div></article>)}</div>}
+        </div>
+        <div className="p-5 md:p-7"><p className="muted-label">03 / PLATFORMS</p><h2 className="mt-1 text-lg font-semibold">{c.platforms}</h2><p className="mt-2 text-sm leading-6 text-slate-500">{c.recText}</p><div className="mt-4 flex flex-wrap gap-2">{platformList.map(p=><button key={p} className={`platform-chip ${selected.includes(p)?"active":""}`} onClick={()=>togglePlatform(p)}>{selected.includes(p)&&<Check size={14}/>} {p}</button>)}</div></div>
+      </div>
+      <div className="studio-primary-actions"><button className="primary-button studio-generate" disabled={!!loading||!sourceText.trim()} onClick={()=>generate(false)}>{loading==="generate"?<LoaderCircle className="animate-spin"/>:<Wand2/>}{loading==="generate"?c.creating:c.create}</button><button className="secondary-button" disabled={!!loading} onClick={()=>generate(true)}><Rocket size={18}/>{c.all}</button></div>
+    </section>
+
+    {error&&<div className="studio-alert error">{error}</div>}{notice&&<div className="studio-alert">{notice}</div>}
+
+    <details className="panel studio-more mt-5"><summary><span><Sparkles size={18}/>{c.more}</span><ChevronDown size={18}/></summary><div className="grid gap-3 border-t border-line p-5 md:grid-cols-3"><button className="secondary-button justify-start" onClick={createWeek} disabled={!!loading}><CalendarDays size={18}/>{loading==="week"?c.creating:c.week}</button><button className="secondary-button justify-start" onClick={()=>setDesignEnabled(true)} disabled={!heroMedia}><Palette size={18}/>{c.visual}</button><Link href="/dashboard/brand" className="secondary-button justify-start"><ImagePlus size={18}/>{c.addBrand}</Link></div></details>
+
+    {weekPlan.length>0&&<section className="panel mt-5 p-5 md:p-7"><div className="flex items-center justify-between"><div><p className="muted-label">AI PLAN</p><h2 className="mt-1 text-xl font-semibold">{c.weekTitle}</h2></div><button className="icon-button" onClick={()=>setWeekPlan([])}>×</button></div><div className="week-grid mt-5">{weekPlan.map(day=><article key={day.day}><b>DAY {day.day}</b><h3>{day.title}</h3><span>{day.format}</span><p>{day.idea}</p></article>)}</div></section>}
+
+    {content&&<section className="mt-6 grid gap-6 xl:grid-cols-[1.08fr_.92fr]">
+      <div className="space-y-5">
+        <section className="panel p-5 md:p-7"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="muted-label">04 / AI TEXT</p><h2 className="mt-1 text-xl font-semibold">{c.result}</h2></div><button className="secondary-button" onClick={copyText}>{copied?<Check size={17}/>:<Copy size={17}/>} {copied?c.copied:c.copy}</button></div>
+          <label className="result-field mt-5"><span>{c.headline}</span><input value={content.headline} onChange={e=>setContent({...content,headline:e.target.value})}/></label>
+          <label className="result-field"><span>{c.mainText}</span><textarea value={content.body} onChange={e=>updateBody(e.target.value)}/></label>
+          <div className="grid gap-3 md:grid-cols-2"><label className="result-field"><span>{c.cta}</span><textarea className="small" value={content.cta} onChange={e=>setContent({...content,cta:e.target.value})}/></label><label className="result-field"><span>{c.short}</span><textarea className="small" value={content.shortVersion} onChange={e=>setContent({...content,shortVersion:e.target.value})}/></label></div>
+          <div className="grid gap-3 md:grid-cols-2"><div className="idea-card"><b>{c.story}</b><p>{content.storyIdea}</p></div><div className="idea-card"><b>{c.videoIdea}</b><p>{content.videoIdea}</p></div></div>
+        </section>
+
+        <details className="panel studio-more" open><summary><span><Sparkles size={18}/>{c.aiEdit}</span><ChevronDown size={18}/></summary><div className="quick-actions border-t border-line p-5">{quickActions.map(([label,instruction])=><button key={label} onClick={()=>editResult(instruction)} disabled={!!loading}>{loading==="edit"?c.editing:label}</button>)}</div></details>
+
+        <section className="panel p-5 md:p-7"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="muted-label">AI TAGS</p><h2 className="mt-1 text-xl font-semibold">{c.hashtags}</h2></div><div className="flex gap-2">{[5,10,15,30].map(n=><button key={n} className={`count-chip ${hashtagCount===n?"active":""}`} onClick={()=>setHashtagCount(n)}>{n}</button>)}</div></div>{(["primary","thematic","local"] as const).map(group=><div className="tag-row" key={group}><b>{c[group]}</b><div>{content.hashtags[group]?.map(tag=><span key={tag}>{tag.startsWith("#")?tag:`#${tag}`}</span>)}</div></div>)}<button className="secondary-button mt-4" onClick={regenerateHashtags} disabled={!!loading}>🔄 {c.regenerateTags}</button></section>
+      </div>
+
+      <div className="space-y-5">
+        <section className="panel overflow-hidden"><div className="p-5 md:p-6"><p className="muted-label">05 / PLATFORM</p><h2 className="mt-1 text-xl font-semibold">{c.preview}</h2><div className="platform-tabs mt-4">{selected.map(p=><button key={p} onClick={()=>setActivePlatform(p)} className={activePlatform===p?"active":""}>{p}</button>)}</div></div>
+          <PlatformPreview platform={activePlatform} copy={{title:activeContent?.title||content.headline,text:activeContent?.text||content.body,cta:activeContent?.cta||content.cta,hashtags:activeContent?.hashtags||[...content.hashtags.primary,...content.hashtags.thematic,...content.hashtags.local],extra:activeContent?.extra||""}} media={heroMedia} brand={brandKit} brandEnabled={brandEnabled} designEnabled={designEnabled} noMedia={c.noMedia}/>
+          <div className="flex flex-wrap gap-2 border-t border-line p-5"><button className="secondary-button" onClick={()=>setDesignEnabled(!designEnabled)} disabled={!heroMedia}><Palette size={17}/>{c.visual}</button><button className="secondary-button" onClick={()=>setNotice(c.designOn)}><Wand2 size={17}/>{c.adapt}</button></div>
+        </section>
+
+        <details className="panel studio-more" open><summary><span><ImagePlus size={18}/>{c.brand}</span><ChevronDown size={18}/></summary><div className="border-t border-line p-5">{hasBrand?<><div className="flex items-center gap-3">{brandKit?.logo?<img src={brandKit.logo} alt="" className="h-12 w-12 rounded-lg object-contain"/>:<div className="flex h-12 w-12 items-center justify-center rounded-lg bg-cyan-50 font-bold text-brand">{(brandKit?.brandName||"B").slice(0,2)}</div>}<div><b>{brandKit?.brandName||c.brand}</b><p className="text-xs text-emerald-700">✓ {brandEnabled?bc.active:bc.off}</p></div></div><p className="mt-3 text-sm leading-6 text-slate-500">{bc.applies}</p><div className="mt-4 flex flex-wrap gap-2"><button className="primary-button px-4 py-2" onClick={()=>generate(false,bc.applied)} disabled={!brandEnabled||!!loading}><Sparkles size={17}/>{bc.apply}</button><Link className="secondary-button px-4 py-2" href="/dashboard/brand">{bc.edit}</Link></div></>:<><p className="text-sm leading-6 text-slate-500">{c.brandHint}</p><Link className="secondary-button mt-4" href="/dashboard/brand">+ {c.addBrand}</Link></>}</div></details>
+      </div>
+    </section>}
+
+    {content&&<section className="panel sticky-actions mt-6"><button className="secondary-button" onClick={copyText}><Clipboard size={17}/>{c.copy}</button><button className="secondary-button" onClick={saveDraft}><Save size={17}/>{c.draft}</button><button className="secondary-button" onClick={()=>setNotice(c.notConnected)}><CalendarDays size={17}/>{c.schedule}</button><button className="primary-button" onClick={()=>setNotice(c.notConnected)}><Send size={17}/>{c.publish}</button><button className="secondary-button" onClick={()=>generate(false)}><Rocket size={17}/>{c.regenerate}</button>{notice===c.notConnected&&<Link href="/dashboard/accounts" className="text-sm font-semibold text-brand underline">{c.connect}</Link>}</section>}
+
+    {editor&&<PhotoEditorModal image={editor.url} t={t} onClose={()=>setEditor(null)} onApply={url=>{setMedia(items=>items.map(x=>x.id===editor.id?{...x,url}:x));setEditor(null);}}/>}
+  </>;
+}

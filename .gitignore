@@ -1,0 +1,13 @@
+node_modules/
+.next/
+out/
+dist/
+tsconfig.tsbuildinfo
+.pnpm-store/
+.env
+.env.local
+.venv/
+__pycache__/
+*.pyc
+*.db
+.pytest_cache/
